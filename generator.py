@@ -96,30 +96,43 @@ def generate_blog_draft(
 
 위 정보들을 바탕으로 이다내 블로거의 영혼이 담긴 생생한 네이버 블로그 초안을 작성해 주세요!"""
 
+    import time
+
     client = genai.Client(api_key=key)
     models_to_try = [
         "gemini-3.6-flash",
         "gemini-3.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
         "gemini-2.5-flash"
     ]
     last_error = None
     for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[system_instruction, prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.7
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[system_instruction, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.7
+                    )
                 )
-            )
-            result = json.loads(response.text)
-            return result
-        except Exception as e:
-            last_error = e
-            err_str = str(e)
-            if "404" in err_str or "NOT_FOUND" in err_str or "no longer available" in err_str:
-                continue
-            raise e
+                result = json.loads(response.text)
+                return result
+            except Exception as e:
+                last_error = e
+                err_str = str(e)
+                if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
+                    if attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    else:
+                        break
+                elif "404" in err_str or "NOT_FOUND" in err_str or "no longer available" in err_str or "429" in err_str:
+                    break
+                else:
+                    break
+
     if last_error:
         raise last_error
