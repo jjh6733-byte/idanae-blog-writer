@@ -21,7 +21,7 @@ st.markdown("""
         padding: 1.8rem 2rem;
         border-radius: 16px;
         color: white;
-        margin-bottom: 2rem;
+        margin-bottom: 1.8rem;
         box-shadow: 0 4px 15px rgba(0, 158, 73, 0.15);
     }
     .main-header h1 {
@@ -68,12 +68,22 @@ st.markdown("""
         margin-bottom: 0.4rem;
         color: #1e293b;
     }
+    .research-box {
+        background-color: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 8px;
+        padding: 0.9rem;
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 from crawler import crawl_and_cache
 from analyzer import analyze_persona
 from generator import generate_blog_draft, load_persona, load_few_shots
+from store_researcher import research_store
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 PERSONA_FILE = os.path.join(DATA_DIR, "idanae_persona.json")
@@ -106,22 +116,22 @@ with st.sidebar:
     persona_ready = os.path.exists(PERSONA_FILE)
     
     if persona_ready:
-        st.markdown('<div class="badge-ready">✔ 이다내 말투 학습 완료 (캐시됨)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="badge-ready">✔ 20개 리뷰글 학습 완료</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="badge-warn">▲ 말투 프로필 생성 필요</div>', unsafe_allow_html=True)
 
     st.caption("기준 블로그: [blog.naver.com/idanae](https://blog.naver.com/idanae)")
-    st.caption("※ 매일 올라오는 꼬맨틀 퀴즈 등 비리뷰 글은 자동 배제됩니다.")
+    st.caption("※ 꼬맨틀 등 단순 퀴즈 풀이 포스팅 100% 배제 완료 (초반 20개 리뷰글 학습)")
 
-    if st.button("🔄 최신 글 재수집 & 말투 재분석"):
+    if st.button("🔄 최신 20개 글 재수집 & 말투 재분석"):
         if not api_key:
             st.error("말투를 재분석하려면 Gemini API Key를 입력해주세요.")
         else:
-            with st.spinner("이다내 블로그의 최신 글을 수집하고 문체를 정밀 재분석 중입니다..."):
+            with st.spinner("이다내 블로그의 20개 리뷰 글을 수집하고 문체를 정밀 재분석 중입니다..."):
                 try:
-                    crawl_and_cache(max_posts=15, force_refresh=True)
+                    crawl_and_cache(max_posts=20, force_refresh=True)
                     analyze_persona(api_key)
-                    st.success("새로운 글들을 반영하여 말투 프로필이 갱신되었습니다! 🎉")
+                    st.success("20개 리뷰글을 바탕으로 말투 프로필이 갱신되었습니다! 🎉")
                     st.rerun()
                 except Exception as e:
                     st.error(f"분석 실패: {e}")
@@ -133,30 +143,25 @@ with st.sidebar:
 st.markdown("""
 <div class="main-header">
     <h1>✨ 이다내(idanae) 블로그 말투 초안 생성기</h1>
-    <p>기세로 갓생 사는 4년차 직장인 이다내 블로거의 유쾌하고 생생한 문체로 네이버 스마트에디터 맞춤 초안을 완성합니다.</p>
+    <p>4년차 직장인 이다내 블로거의 유쾌하고 생생한 문체 + 실시간 가게 메뉴/가격 자동 조회가 결합된 네이버 블로그 맞춤 초안기</p>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["✍️ 신규 초안 작성", "🧠 학습된 말투 프로필", "📚 수집된 블로그 글 (참고자료)"])
-
-# Sample data helper
-if "sample_data" not in st.session_state:
-    st.session_state["sample_data"] = False
+tab1, tab2, tab3 = st.tabs(["✍️ 신규 초안 작성", "🧠 학습된 말투 프로필", "📚 수집된 블로그 글 (20개 참고자료)"])
 
 def fill_sample():
     st.session_state["category_input"] = "살이되고 살이찐(맛집/카페)"
     st.session_state["subject_input"] = "성수 호호식당"
+    st.session_state["eaten_input"] = "사케동, 로스가츠정식, 우니 오일 파스타, 레몬 하이볼"
     st.session_state["context_input"] = "주말에 친구랑 성수동 나들이 겸 분위기 좋은 일본 가정식 먹으러 방문!"
-    st.session_state["menu_input"] = "· 사케동 — 17,000원\n· 로스가츠정식 — 14,000원\n· 우니 오일 파스타 — 21,000원\n· 레몬 하이볼 — 8,000원"
-    st.session_state["taste_input"] = "연어가 두툼하고 신선해서 비린내 1도 없고 밥 간이 기가 막힘. 와사비 올려 먹으면 천국의 맛이다,, 로스가츠는 겉이 진짜 빠짝!!!!!! 속은 육즙 팡팡. 우니 파스타는 우니를 듬뿍 넣어주셔서 풍미가 완전 킥 포인트! 친구랑 싹싹 비워버림 ㅋ"
-    st.session_state["store_input"] = "서울 성동구 서울숲4길 25, 뚝섬역 도보 5분, 고즈넉한 한옥 인테리어에 자연광 채광 너무 예쁨, 주차 불가(인근 서울숲 유료주차장 이용)"
-    st.session_state["tip_input"] = "주말엔 웨이팅 필수라 테이블링 앱으로 원격 줄서기 꼭 하셔! 화장실에 핸드워시랑 핸드크림 이솝으로 구비해두신 사장님 센스 최고,,"
+    st.session_state["taste_input"] = "연어가 두툼하고 신선해서 비린내 1도 없고 밥 간이 기가 막힘. 와사비 올려 먹으면 입에서 사르르 녹아내림,, 로스가츠는 겉이 진짜 파삭파삭 바삭함의 극치인데 속은 육즙 팡팡 촉촉함. 우니 파스타는 우니를 아낌없이 넣어주셔서 감칠맛 폭발! 친구랑 한 톨도 안 남기고 싹 비움 ㅋ"
+    st.session_state["tip_input"] = "주말엔 웨이팅 필수라 테이블링 앱으로 원격 줄서기 꼭 하셔! 화장실에 이솝 핸드워시 구비해두신 사장님 센스 최고,,"
 
 with tab1:
     col_in, col_out = st.columns([1.05, 1.15], gap="large")
     
     with col_in:
-        c_title, c_btn = st.columns([2.5, 1.5])
+        c_title, c_btn = st.columns([2.2, 1.8])
         with c_title:
             st.markdown("### 📝 방문/체험 메모 입력")
         with c_btn:
@@ -169,40 +174,64 @@ with tab1:
             key="category_input"
         )
         
-        subject_name = st.text_input(
-            "상호명 또는 제품명*",
-            placeholder="예: 한남물터, 성수 호호식당, 르말뒤페이 휘낭시에",
-            key="subject_input"
+        c_sub1, c_sub2 = st.columns([2.5, 1.5])
+        with c_sub1:
+            subject_name = st.text_input(
+                "상호명 또는 제품명*",
+                placeholder="예: 성수 호호식당, 한남물터, 올라포케 문정",
+                key="subject_input"
+            )
+        with c_sub2:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            search_menu_btn = st.button("🔍 메뉴/정보 조회", use_container_width=True)
+
+        # Handle explicit store search
+        active_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        if search_menu_btn:
+            if not subject_name:
+                st.warning("상호명을 먼저 입력해 주세요!")
+            else:
+                with st.spinner(f"'{subject_name}'의 메뉴/가격 및 최근 블로그 후기를 검색 중입니다..."):
+                    researched = research_store(subject_name, eaten_foods=eaten_foods, api_key=active_key)
+                    st.session_state[f"research_{subject_name}"] = researched
+                    st.success(f"'{subject_name}'의 메뉴 정보와 최근 후기 정보를 가져왔습니다! 👏")
+
+        cached_research = st.session_state.get(f"research_{subject_name}")
+        if cached_research and cached_research.get("formatted_menu_text"):
+            with st.expander("🔎 자동 검색된 가게 정보 및 메뉴판 확인", expanded=True):
+                if cached_research.get("address"):
+                    st.markdown(f"**📍 주소:** {cached_research.get('address')}")
+                if cached_research.get("hours"):
+                    st.markdown(f"**⏰ 영업시간:** {cached_research.get('hours')}")
+                st.markdown("**📋 확인된 메뉴 및 가격표:**")
+                st.text(cached_research.get("formatted_menu_text"))
+                if cached_research.get("recent_review_highlights"):
+                    st.markdown("**💬 최근 블로그 후기 요약:**")
+                    for h in cached_research.get("recent_review_highlights"):
+                        st.markdown(f"- {h}")
+
+        eaten_foods = st.text_input(
+            "🍽️ 내가 실제로 먹은 음식*",
+            placeholder="예: 사케동, 로스가츠정식, 우니 오일 파스타 (가격은 몰라도 OK!)",
+            help="가격은 비워두시고 드신 음식 이름만 콤마로 간단히 적어주세요. 가게 전체 메뉴 및 가격은 검색을 통해 초안에 자동 반영됩니다.",
+            key="eaten_input"
         )
         
         context = st.text_input(
             "방문/구매 계기",
-            placeholder="예: 퇴근 후 한잔할 곳 찾다가 발견, 가볍지만 든든한 점심 혼밥",
+            placeholder="예: 주말 데이트, 퇴근 후 한잔할 곳 찾다가 발견, 점심 혼밥",
             key="context_input"
         )
         
-        menu_price = st.text_area(
-            "주문 메뉴 및 가격",
-            placeholder="예:\n· 모둠회와 계절나물무침 — 59,000원\n· 광주식 왕새우무침 — 39,000원",
-            height=110,
-            key="menu_input"
-        )
-        
         taste_impressions = st.text_area(
-            "솔직한 맛/사용 후기 & 킥포인트*",
-            placeholder="예: 회가 엄청 두툼하고 쫀득함. 보통 초장/간장에 먹는데 제철 나물이랑 싸먹는게 완전 미친 조합(킥)! 생새우무침은 양념게장 뺨치는 매콤달콤 밥도둑.",
-            height=130,
+            "솔직한 맛/식감 후기 & 킥포인트*",
+            placeholder="예: 연어가 엄청 두툼하고 신선함. 와사비 올려 먹으면 최고! 로스가츠는 겉은 파삭 속은 촉촉 육즙 가득. 우니 파스타는 우니 풍미가 대박이라 완전 킥 포인트였음.",
+            height=120,
             key="taste_input"
         )
         
-        store_info = st.text_input(
-            "위치 / 주차 / 분위기 정보",
-            placeholder="예: 서울 용산구 대사관로, 발렛 주차 2시간 가능(5천원), 조도 좋고 힙함",
-            key="store_input"
-        )
-        
         extra_tips = st.text_input(
-            "디테일 센스 및 꿀팁",
+            "디테일 센스 및 꿀팁 (선택)",
             placeholder="예: 화장실에 가글 구비된 사장님 센스 최고,, 면 추가는 꼭 하셔!",
             key="tip_input"
         )
@@ -214,25 +243,40 @@ with tab1:
         st.markdown("### 📄 생성된 네이버 블로그 초안")
         
         if generate_btn:
-            active_key = api_key or os.environ.get("GEMINI_API_KEY", "")
             if not subject_name:
                 st.error("상호명 또는 제품명을 입력해 주세요!")
+            elif not eaten_foods:
+                st.error("실제로 드신 음식(메뉴명)을 입력해 주세요!")
             elif not taste_impressions:
-                st.error("솔직한 맛/후기 내용을 입력해 주세요!")
+                st.error("솔직한 맛/후기 내용을 간단히 적어주세요!")
             elif not active_key:
                 st.warning("⚠️ 사이드바에 Google Gemini API Key를 입력해 주세요. (무료 발급: aistudio.google.com)")
             else:
                 user_notes = {
                     "context": context,
-                    "menu_price": menu_price,
                     "taste_impressions": taste_impressions,
-                    "store_info": store_info,
                     "extra_tips": extra_tips
                 }
-                with st.spinner("기세로 갓생 사는 이다내 빙의 중... ✨"):
+                
+                # Check if store already researched
+                store_data = st.session_state.get(f"research_{subject_name}")
+                if not store_data:
+                    with st.spinner(f"'{subject_name}'의 메뉴/가격 및 최근 후기 정보를 실시간 검색 중입니다... 🔎"):
+                        store_data = research_store(subject_name, eaten_foods=eaten_foods, api_key=active_key)
+                        st.session_state[f"research_{subject_name}"] = store_data
+
+                with st.spinner("이다내 페르소나로 참신하고 생생한 초안을 작성 중입니다... ✨"):
                     try:
-                        result = generate_blog_draft(category, subject_name, user_notes, api_key=active_key)
+                        result = generate_blog_draft(
+                            category=category,
+                            subject_name=subject_name,
+                            eaten_foods=eaten_foods,
+                            user_notes=user_notes,
+                            store_research_data=store_data,
+                            api_key=active_key
+                        )
                         st.session_state["last_draft"] = result
+                        st.session_state["last_store_data"] = store_data
                         st.success("초안 작성이 완료되었습니다! 🎈")
                     except Exception as e:
                         st.error(f"생성 중 오류 발생: {e}")
@@ -250,7 +294,7 @@ with tab1:
             st.markdown("---")
             
             # 2. Main Body
-            st.markdown("#### 📝 2. 본문 초안 (`[사진: ...]` 위치 가이드 포함)")
+            st.markdown("#### 📝 2. 본문 초안 (`[사진: ...]` 위치 가이드 및 실제 메뉴/가격 포함)")
             st.caption("본문 전체를 복사하여 스마트에디터에 붙여넣고, `[사진: ...]` 위치에 촬영 사진을 첨부하세요.")
             body_text = draft.get("body", "")
             
@@ -282,6 +326,7 @@ with tab2:
     persona = load_persona()
     if persona:
         st.info(f"**💡 페르소나 정의**: {persona.get('profile_summary', '')}")
+        st.success("✨ **업데이트 반영: 참신한 어휘 생성 지침(Novelty Directive)**\n기존 글의 상투적 문구를 복제하지 않고, 이다내 특유의 갓생 직장인 텐션과 쉼표 호흡(,,)을 바탕으로 새롭고 독창적인 맛 표현과 감탄사를 창작하도록 프롬프트가 개편되었습니다.")
         
         c1, c2 = st.columns(2)
         with c1:
@@ -320,16 +365,17 @@ with tab2:
         st.warning("말투 프로필이 없습니다.")
 
 with tab3:
-    st.markdown("### 📚 학습에 활용된 실제 블로그 포스팅 목록")
-    st.caption("블로그 `idanae`의 실제 최근 리뷰 포스팅 원문 데이터입니다. (꼬맨틀 등 단순 퀴즈 풀이 포스팅 배제 완료)")
+    st.markdown("### 📚 학습에 활용된 실제 블로그 포스팅 목록 (20건)")
+    st.caption("블로그 `idanae`의 실제 최근 리뷰 포스팅 원문 데이터 20건입니다. (꼬맨틀 퀴즈 등 단순 문제풀이 포스팅 배제 완료)")
     
-    posts = load_few_shots(15)
+    posts = load_few_shots(20)
     if posts:
-        for p in posts:
-            with st.expander(f"[{p.get('category')}] {p.get('title')} ({p.get('pub_date')})"):
+        st.write(f"총 **{len(posts)}개**의 순수 리뷰 포스팅이 학습 및 참고 데이터로 등록되어 있습니다.")
+        for idx, p in enumerate(posts, 1):
+            with st.expander(f"{idx}. [{p.get('category')}] {p.get('title')} ({p.get('pub_date')})"):
                 st.markdown(f"🔗 [네이버 블로그 원문 보기]({p.get('url')})")
                 st.markdown(f"**태그:** `{', '.join(p.get('tags', []))}`")
                 st.markdown("**본문 발췌:**")
-                st.text(p.get("content", "")[:1200] + "...")
+                st.text(p.get("content", "")[:1000] + "...")
     else:
         st.info("수집된 포스팅 데이터가 없습니다.")
