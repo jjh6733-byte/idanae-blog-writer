@@ -33,12 +33,23 @@ def load_few_shots(count: int = 3) -> list:
 def generate_blog_draft(
     category: str,
     subject_name: str,
-    eaten_foods: str,
-    user_notes: dict,
+    eaten_foods: str = "",
+    user_notes: dict = None,
     store_research_data: dict = None,
-    api_key: str = None
+    api_key: str = None,
+    **kwargs
 ) -> dict:
     """Generate a complete Naver blog draft mimicking idanae's voice with fresh phrasing and researched store info."""
+    # Backward compatibility with older callers
+    if isinstance(eaten_foods, dict) and user_notes is None:
+        user_notes = eaten_foods
+        eaten_foods = user_notes.get("eaten_foods", "")
+    
+    if user_notes is None:
+        user_notes = {}
+    if not eaten_foods and "eaten_foods" in user_notes:
+        eaten_foods = user_notes["eaten_foods"]
+
     key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not key:
         raise ValueError("GEMINI_API_KEY가 필요합니다. 사이드바에 API 키를 입력해 주세요.")

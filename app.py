@@ -187,12 +187,13 @@ with tab1:
 
         # Handle explicit store search
         active_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        current_eaten_foods = st.session_state.get("eaten_input", "")
         if search_menu_btn:
             if not subject_name:
                 st.warning("상호명을 먼저 입력해 주세요!")
             else:
                 with st.spinner(f"'{subject_name}'의 메뉴/가격 및 최근 블로그 후기를 검색 중입니다..."):
-                    researched = research_store(subject_name, eaten_foods=eaten_foods, api_key=active_key)
+                    researched = research_store(subject_name, eaten_foods=current_eaten_foods, api_key=active_key)
                     st.session_state[f"research_{subject_name}"] = researched
                     st.success(f"'{subject_name}'의 메뉴 정보와 최근 후기 정보를 가져왔습니다! 👏")
 
@@ -255,7 +256,8 @@ with tab1:
                 user_notes = {
                     "context": context,
                     "taste_impressions": taste_impressions,
-                    "extra_tips": extra_tips
+                    "extra_tips": extra_tips,
+                    "eaten_foods": eaten_foods
                 }
                 
                 # Check if store already researched
@@ -267,14 +269,25 @@ with tab1:
 
                 with st.spinner("이다내 페르소나로 참신하고 생생한 초안을 작성 중입니다... ✨"):
                     try:
-                        result = generate_blog_draft(
-                            category=category,
-                            subject_name=subject_name,
-                            eaten_foods=eaten_foods,
-                            user_notes=user_notes,
-                            store_research_data=store_data,
-                            api_key=active_key
-                        )
+                        try:
+                            result = generate_blog_draft(
+                                category=category,
+                                subject_name=subject_name,
+                                eaten_foods=eaten_foods,
+                                user_notes=user_notes,
+                                store_research_data=store_data,
+                                api_key=active_key
+                            )
+                        except TypeError as te:
+                            if "eaten_foods" in str(te):
+                                result = generate_blog_draft(
+                                    category=category,
+                                    subject_name=subject_name,
+                                    user_notes=user_notes,
+                                    api_key=active_key
+                                )
+                            else:
+                                raise te
                         st.session_state["last_draft"] = result
                         st.session_state["last_store_data"] = store_data
                         st.success("초안 작성이 완료되었습니다! 🎈")
