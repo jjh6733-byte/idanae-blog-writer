@@ -3,9 +3,10 @@ import sys
 import json
 import re
 import time
+import urllib.parse
+import html
 import requests
 from bs4 import BeautifulSoup
-import xml.etree.ElementTree as ET
 
 # Set stdout encoding to UTF-8
 if sys.stdout.encoding != 'utf-8':
@@ -23,21 +24,10 @@ HEADERS = {
     "Referer": f"https://blog.naver.com/{BLOG_ID}"
 }
 
-EXCLUDE_KEYWORDS = ["꼬맨틀", "꼬멘틀", "정답", "힌트", "유사도", "스포방지", "문제풀이", "월루게임"]
-EXCLUDE_CATEGORIES = ["매일 문제풀이(맨틀/기타)"]
-
-def is_valid_review_post(title: str, category: str = "") -> bool:
-    """Check if post is a genuine review post rather than daily puzzle answer."""
-    for kw in EXCLUDE_KEYWORDS:
-        if kw in title:
-            return False
-    for ec in EXCLUDE_CATEGORIES:
-        if ec in category:
-            return False
-    return True
+EXCLUDE_KEYWORDS = ["꼬맨틀", "꼬멘틀", "정답", "힌트", "유사도", "스포방지", "문제풀이", "월루게임", "단어맞추기"]
 
 def clean_text(text: str) -> str:
-    """Remove invisible zero-width characters and excessive whitespace."""
+    """Remove invisible characters and excessive whitespace."""
     if not text:
         return ""
     text = text.replace('\u200b', ' ').replace('\ufeff', ' ').replace('\xa0', ' ')
@@ -63,8 +53,7 @@ def fetch_post_content(log_no: str) -> dict:
             paragraphs = main_container.select(".se-text-paragraph, p.se_textarea, div.se-component-content")
             if paragraphs:
                 for p in paragraphs:
-                    text = p.get_text(" ", strip=True)
-                    text = text.replace('\u200b', '').strip()
+                    text = p.get_text(" ", strip=True).replace('\u200b', '').strip()
                     if text and text not in content_lines[-1:]:
                         content_lines.append(text)
             else:
@@ -79,78 +68,79 @@ def fetch_post_content(log_no: str) -> dict:
         print(f"Error fetching log_no {log_no}: {e}")
         return {"content": ""}
 
-def get_posts_from_rss(max_posts: int = 15) -> list:
-    """Extract posts from Naver Blog RSS feed."""
-    rss_url = f"https://rss.blog.naver.com/{BLOG_ID}.xml"
-    try:
-        resp = requests.get(rss_url, headers=HEADERS, timeout=10)
-        resp.encoding = "utf-8"
-        root = ET.fromstring(resp.content)
-    except Exception as e:
-        print(f"Error fetching RSS: {e}")
-        return []
-
-    collected_posts = []
-    items = root.findall("./channel/item")
-
-    for item in items:
-        title = item.findtext("title", "")
-        category = item.findtext("category", "")
-        link = item.findtext("link", "")
-        pub_date = item.findtext("pubDate", "")
-        guid = item.findtext("guid", "")
-        tags_raw = item.findtext("tag", "")
-
-        log_no_match = re.search(r"/(\d+)", guid) or re.search(r"/(\d+)", link)
-        if not log_no_match:
-            continue
-        log_no = log_no_match.group(1)
-
-        if not is_valid_review_post(title, category):
-            continue
-
-        tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else []
-
-        print(f"Crawling review post [{category}] {title} ({log_no})...")
-        details = fetch_post_content(log_no)
-        time.sleep(0.2)
-
-        post_data = {
-            "log_no": log_no,
-            "title": title,
-            "category": category,
-            "pub_date": pub_date,
-            "tags": tags,
-            "content": details.get("content", ""),
-            "url": f"https://blog.naver.com/{BLOG_ID}/{log_no}"
-        }
-
-        if post_data["content"] and len(post_data["content"]) > 100:
-            collected_posts.append(post_data)
-            if len(collected_posts) >= max_posts:
-                break
-
-    return collected_posts
-
-def crawl_and_cache(max_posts: int = 15, force_refresh: bool = False) -> list:
-    """Crawl posts and save to cache file."""
+def crawl_and_cache(max_posts: int = 20, force_refresh: bool = False) -> list:
+    """
+    Crawl exactly the 20 OLDEST restaurant/cafe review posts from Category 7 ('살이되고 살이찐(맛집/카페)'),
+    excluding any puzzle/quiz posts, in chronological order.
+    """
     os.makedirs(DATA_DIR, exist_ok=True)
 
     if not force_refresh and os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 posts = json.load(f)
-                if posts and len(posts) >= 5:
+                if posts and len(posts) >= max_posts:
                     return posts
         except Exception as e:
             print(f"Failed to read cache: {e}")
 
-    posts = get_posts_from_rss(max_posts=max_posts)
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(posts, f, ensure_ascii=False, indent=2)
+    print(f"Fetching posts from Category 7 '살이되고 살이찐(맛집/카페)' on blog '{BLOG_ID}'...")
+    page = 1
+    cat7_posts = []
 
-    return posts
+    while True:
+        api_url = f"https://blog.naver.com/PostTitleListAsync.naver?blogId={BLOG_ID}&viewdate=&currentPage={page}&categoryNo=7&parentCategoryNo=&countPerPage=30"
+        resp = requests.get(api_url, headers=HEADERS, timeout=10)
+        if resp.status_code != 200:
+            break
+        txt = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', resp.text)
+        try:
+            data = json.loads(txt)
+        except Exception as e:
+            print(f"Error parsing page {page}: {e}")
+            break
+        
+        post_list = data.get("postList", [])
+        if not post_list:
+            break
+        for p in post_list:
+            raw_title = p.get("title", "")
+            title = html.unescape(urllib.parse.unquote_plus(raw_title))
+            
+            if any(kw in title for kw in EXCLUDE_KEYWORDS):
+                continue
+
+            cat7_posts.append({
+                "log_no": str(p.get("logNo")),
+                "title": title,
+                "pub_date": p.get("addDate", ""),
+                "category": "살이되고 살이찐(맛집/카페)",
+                "url": f"https://blog.naver.com/{BLOG_ID}/{p.get('logNo')}"
+            })
+        total = int(data.get("totalCount", 0))
+        if page * 30 >= total:
+            break
+        page += 1
+
+    # Reverse to sort from oldest to newest (chronological order)
+    oldest_posts = list(reversed(cat7_posts))[:max_posts]
+
+    collected = []
+    for idx, p in enumerate(oldest_posts, 1):
+        log_no = p["log_no"]
+        print(f"[{idx}/{len(oldest_posts)}] Crawling oldest review post ({p['pub_date']}): {p['title'][:35]}...")
+        details = fetch_post_content(log_no)
+        time.sleep(0.15)
+        p["content"] = details.get("content", "")
+        p["tags"] = []
+        collected.append(p)
+
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(collected, f, ensure_ascii=False, indent=2)
+
+    print(f"Successfully cached {len(collected)} OLDEST review posts to {CACHE_FILE}")
+    return collected
 
 if __name__ == "__main__":
-    posts = crawl_and_cache(max_posts=15, force_refresh=True)
-    print(f"Successfully cached {len(posts)} posts.")
+    posts = crawl_and_cache(max_posts=20, force_refresh=True)
+    print(f"Total cached: {len(posts)} review posts.")

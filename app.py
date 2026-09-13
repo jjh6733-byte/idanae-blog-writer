@@ -379,7 +379,7 @@ with tab2:
 
 with tab3:
     st.markdown("### 📚 학습에 활용된 실제 블로그 포스팅 목록 (20건)")
-    st.caption("블로그 `idanae`의 실제 최근 리뷰 포스팅 원문 데이터 20건입니다. (꼬맨틀 퀴즈 등 단순 문제풀이 포스팅 배제 완료)")
+    st.caption("블로그 `idanae`의 실제 맛집/카페 카테고리 초창기 리뷰 포스팅 20건입니다. (가장 오래된 순, 꼬맨틀 등 단순 퀴즈 배제 완료)")
     
     posts = load_few_shots(20)
     if posts:
