@@ -54,17 +54,44 @@ def analyze_persona(api_key: str = None) -> dict:
     corpus = "\n\n".join(sample_texts)
 
     client = genai.Client(api_key=key)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[ANALYSIS_PROMPT, corpus],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.2
-        )
-    )
+    models_to_try = [
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
+    ]
+    response = None
+    last_error = None
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[ANALYSIS_PROMPT, corpus],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2
+                )
+            )
+            break
+        except Exception as e:
+            last_error = e
+            err_str = str(e)
+            print(f"[Analyzer] Model {model_name} error: {e}")
+            if "404" in err_str or "NOT_FOUND" in err_str or "no longer available" in err_str or "503" in err_str or "UNAVAILABLE" in err_str:
+                continue
+            raise e
+    if not response and last_error:
+        raise last_error
 
     try:
-        persona = json.loads(response.text)
+        raw_text = response.text.strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        if raw_text.startswith("```"):
+            raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        persona = json.loads(raw_text.strip())
         with open(PERSONA_FILE, "w", encoding="utf-8") as f:
             json.dump(persona, f, ensure_ascii=False, indent=2)
         print("Successfully analyzed and saved persona to:", PERSONA_FILE)

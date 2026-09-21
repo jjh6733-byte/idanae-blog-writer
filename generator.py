@@ -169,18 +169,40 @@ def generate_blog_draft(
 위 실제 가게 정보와 메뉴/가격을 바탕으로, 내가 먹은 음식({eaten_foods})에 대한 참신하고 생생한 이다내 스타일의 네이버 블로그 초안을 작성해 주세요!"""
 
     client = genai.Client(api_key=key)
-    models_to_try = [
+
+    # Base candidates (Gemini 3.6 Flash and stable fallbacks, excluding discontinued 2.5)
+    base_models = [
         "gemini-3.6-flash",
-        "gemini-3.5-flash",
+        "gemini-3.7-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-2.5-flash"
+        "gemini-1.5-flash"
     ]
+    models_to_try = []
+
+    # Try dynamically discovering active Flash models for this API key
+    try:
+        remote_models = [
+            m.name.replace("models/", "")
+            for m in client.models.list()
+            if "flash" in m.name.lower() and "2.5" not in m.name
+        ]
+        for bm in base_models:
+            if bm in remote_models and bm not in models_to_try:
+                models_to_try.append(bm)
+        for rm in remote_models:
+            if rm not in models_to_try and not rm.endswith("-8b"):
+                models_to_try.append(rm)
+    except Exception as e:
+        print(f"[Gemini API] Could not list models dynamically ({e}), using default list.")
+
+    if not models_to_try:
+        models_to_try = base_models
 
     last_error = None
     for model_name in models_to_try:
         for attempt in range(2):
             try:
+                print(f"[Gemini API] Generating draft with model '{model_name}' (attempt {attempt+1})...")
                 response = client.models.generate_content(
                     model=model_name,
                     contents=[system_instruction, prompt],
@@ -189,13 +211,22 @@ def generate_blog_draft(
                         temperature=0.75
                     )
                 )
-                result = json.loads(response.text)
+                raw_text = response.text.strip()
+                if raw_text.startswith("```json"):
+                    raw_text = raw_text[7:]
+                if raw_text.startswith("```"):
+                    raw_text = raw_text[3:]
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+                result = json.loads(raw_text.strip())
                 # Attach researched store data for caller reference
                 result["store_research_data"] = store_research_data
+                print(f"[Gemini API] Successfully generated draft using '{model_name}'!")
                 return result
             except Exception as e:
                 last_error = e
                 err_str = str(e)
+                print(f"[Gemini API] Model '{model_name}' failed: {e}")
                 if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
                     if attempt == 0:
                         time.sleep(1.5)

@@ -172,10 +172,9 @@ def research_store(store_name: str, eaten_foods: str = "", api_key: str = None) 
 
     models_to_try = [
         "gemini-3.6-flash",
-        "gemini-3.5-flash",
+        "gemini-3.7-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-2.5-flash"
+        "gemini-1.5-flash"
     ]
 
     for model_name in models_to_try:
@@ -188,7 +187,14 @@ def research_store(store_name: str, eaten_foods: str = "", api_key: str = None) 
                     temperature=0.2
                 )
             )
-            data = json.loads(response.text)
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.startswith("```"):
+                raw_text = raw_text[3:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            data = json.loads(raw_text.strip())
             # Ensure essential fields exist
             if not data.get("address") and direct_fallback.get("address"):
                 data["address"] = direct_fallback["address"]
@@ -200,7 +206,7 @@ def research_store(store_name: str, eaten_foods: str = "", api_key: str = None) 
                 data["formatted_menu_text"] = direct_fallback["formatted_menu_text"]
             return data
         except Exception as e:
-            print(f"Model {model_name} research error: {e}")
+            print(f"[Store Researcher] Model {model_name} error: {e}")
             continue
 
     # If all models failed, return robust direct fallback
