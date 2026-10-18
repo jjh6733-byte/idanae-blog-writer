@@ -191,10 +191,11 @@ def generate_blog_draft(
 
     client = genai.Client(api_key=key)
 
-    # Base candidates (Gemini 3.6 Flash and stable fallbacks, excluding discontinued 2.5)
+    # Base candidates (Gemini 3.8 / 3.7 / 3.6 Flash and stable fallbacks, excluding discontinued 2.5)
     base_models = [
-        "gemini-3.6-flash",
+        "gemini-3.8-flash",
         "gemini-3.7-flash",
+        "gemini-3.6-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash"
     ]

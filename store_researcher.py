@@ -171,8 +171,9 @@ def research_store(store_name: str, eaten_foods: str = "", api_key: str = None) 
 위 정보를 바탕으로 정확한 메뉴명, 가격표, 매장 정보, 최근 후기 요약을 작성해 주세요."""
 
     models_to_try = [
-        "gemini-3.6-flash",
+        "gemini-3.8-flash",
         "gemini-3.7-flash",
+        "gemini-3.6-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash"
     ]

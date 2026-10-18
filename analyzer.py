@@ -55,8 +55,9 @@ def analyze_persona(api_key: str = None) -> dict:
 
     client = genai.Client(api_key=key)
     models_to_try = [
-        "gemini-3.6-flash",
+        "gemini-3.8-flash",
         "gemini-3.7-flash",
+        "gemini-3.6-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash"
     ]
