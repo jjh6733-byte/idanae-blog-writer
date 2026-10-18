@@ -80,6 +80,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+import importlib
+import crawler
+import analyzer
+import generator
+import store_researcher
+try:
+    importlib.reload(generator)
+    importlib.reload(store_researcher)
+    importlib.reload(analyzer)
+except Exception:
+    pass
+
 from crawler import crawl_and_cache
 from analyzer import analyze_persona
 from generator import generate_blog_draft, load_persona, load_few_shots
@@ -116,22 +128,22 @@ with st.sidebar:
     persona_ready = os.path.exists(PERSONA_FILE)
     
     if persona_ready:
-        st.markdown('<div class="badge-ready">✔ 20개 리뷰글 학습 완료</div>', unsafe_allow_html=True)
+        st.markdown('<div class="badge-ready">✔ 최신 5개 리뷰글 양식 학습 완료</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="badge-warn">▲ 말투 프로필 생성 필요</div>', unsafe_allow_html=True)
 
     st.caption("기준 블로그: [blog.naver.com/idanae](https://blog.naver.com/idanae)")
-    st.caption("※ 꼬맨틀 등 단순 퀴즈 풀이 포스팅 100% 배제 완료 (초반 20개 리뷰글 학습)")
+    st.caption("※ 꼬맨틀 등 퀴즈 포스팅 배제 완료 (최신 5개 리뷰글 & Episode 양식 반영)")
 
-    if st.button("🔄 최신 20개 글 재수집 & 말투 재분석"):
+    if st.button("🔄 최신 5개 글 재수집 & 양식 재분석"):
         if not api_key:
             st.error("말투를 재분석하려면 Gemini API Key를 입력해주세요.")
         else:
-            with st.spinner("이다내 블로그의 20개 리뷰 글을 수집하고 문체를 정밀 재분석 중입니다..."):
+            with st.spinner("이다내 블로그의 최신 5개 리뷰 글을 수집하고 최신 양식을 정밀 재분석 중입니다..."):
                 try:
-                    crawl_and_cache(max_posts=20, force_refresh=True)
+                    crawl_and_cache(max_posts=5, force_refresh=True)
                     analyze_persona(api_key)
-                    st.success("20개 리뷰글을 바탕으로 말투 프로필이 갱신되었습니다! 🎉")
+                    st.success("최신 5개 리뷰글을 바탕으로 말투/양식 프로필이 갱신되었습니다! 🎉")
                     st.rerun()
                 except Exception as e:
                     st.error(f"분석 실패: {e}")
@@ -143,11 +155,11 @@ with st.sidebar:
 st.markdown("""
 <div class="main-header">
     <h1>✨ 이다내(idanae) 블로그 말투 초안 생성기</h1>
-    <p>4년차 직장인 이다내 블로거의 유쾌하고 생생한 문체 + 실시간 가게 메뉴/가격 자동 조회가 결합된 네이버 블로그 맞춤 초안기</p>
+    <p>최신 5개 게시글 양식(Episode.1~3 포맷, ✧ 소제목 ✧, 🔗🕔📞🚗 가게정보) + 실시간 메뉴/가격 조회가 결합된 맞춤 초안기</p>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["✍️ 신규 초안 작성", "🧠 학습된 말투 프로필", "📚 수집된 블로그 글 (20개 참고자료)"])
+tab1, tab2, tab3 = st.tabs(["✍️ 신규 초안 작성", "🧠 학습된 최신 양식 & 말투", "📚 수집된 최신 글 (5개 참고자료)"])
 
 def fill_sample():
     st.session_state["category_input"] = "살이되고 살이찐(맛집/카페)"
@@ -335,10 +347,10 @@ with tab1:
             st.info("👈 왼쪽 폼에 정보를 작성하거나 **'예시 데이터 채우기'**를 누른 뒤 **'초안 생성하기'**를 클릭하세요!")
 
 with tab2:
-    st.markdown("### 🧠 학습된 이다내(idanae) 페르소나 & 문체 지문")
+    st.markdown("### 🧠 학습된 이다내(idanae) 최신 양식 & 문체 지문")
     persona = load_persona()
     if persona:
-        st.success("✨ **업데이트 반영: 대중적이고 자연스러운 인기 맛집 표현 탑재**\n이다내 블로그의 쉼표 호흡(,,)과 친근한 종결어미를 바탕으로, 어색한 AI식 비유 대신 2030 인기 맛집 블로거들이 실제로 가장 많이 쓰는 대중적인 표현(또간집 예약, 재방문의사 200%, 겉바속촉, 밥도둑, 잡내 1도 없음 등)으로 생생하고 자연스럽게 작성합니다.")
+        st.success("✨ **최신 5개 게시글 양식 완벽 반영!**\n최근 변경된 블로그 작성 양식(`최상단 3줄 타이틀 헤더`, `🔗주소 / 🕔영업시간 / 📞전화번호 / 🚗주차`, `✧ 가 게 외 관 ✧`, `Episode.1 M E N U / Episode.2 I N T E R I O R / Episode.3 R E V I E W`, `· 메뉴명 가격` 리스트, 모바일용 짧은 호흡 줄바꿈)을 그대로 적용하여 초안을 생성합니다.")
         
         c1, c2 = st.columns(2)
         with c1:
@@ -354,7 +366,7 @@ with tab2:
             st.markdown("#### ✨ 애용 이모지 & 추임새")
             st.write(" ".join(persona.get("emojis", [])))
             
-            st.markdown("#### 📐 글 전개 구조")
+            st.markdown("#### 📐 최신 글 전개 구조 (Episode 포맷)")
             rules = persona.get("structure_rules", {})
             st.markdown(f"**제목 규칙:** `{rules.get('title_format', '')}`")
             st.markdown("**단락 순서:**")
@@ -377,17 +389,16 @@ with tab2:
         st.warning("말투 프로필이 없습니다.")
 
 with tab3:
-    st.markdown("### 📚 학습에 활용된 실제 블로그 포스팅 목록 (20건)")
-    st.caption("블로그 `idanae`의 실제 맛집/카페 카테고리 초창기 리뷰 포스팅 20건입니다. (가장 오래된 순, 꼬맨틀 등 단순 퀴즈 배제 완료)")
+    st.markdown("### 📚 참고 중인 최신 블로그 포스팅 목록 (최신 5건)")
+    st.caption("블로그 `idanae`의 가장 최근 리뷰 포스팅 5건입니다. (최신순, 꼬맨틀 등 퀴즈 게시글 100% 배제 완료)")
     
-    posts = load_few_shots(20)
+    posts = load_few_shots(5)
     if posts:
-        st.write(f"총 **{len(posts)}개**의 순수 리뷰 포스팅이 학습 및 참고 데이터로 등록되어 있습니다.")
+        st.write(f"총 **{len(posts)}개**의 최신 리뷰 포스팅 양식이 학습 및 참고 데이터로 등록되어 있습니다.")
         for idx, p in enumerate(posts, 1):
-            with st.expander(f"{idx}. [{p.get('category')}] {p.get('title')} ({p.get('pub_date')})"):
+            with st.expander(f"{idx}. [{p.get('category')}] {p.get('title')} ({p.get('pub_date')})", expanded=(idx == 1)):
                 st.markdown(f"🔗 [네이버 블로그 원문 보기]({p.get('url')})")
-                st.markdown(f"**태그:** `{', '.join(p.get('tags', []))}`")
-                st.markdown("**본문 발췌:**")
-                st.text(p.get("content", "")[:1000] + "...")
+                st.markdown("**본문 발췌 (최신 작성 양식):**")
+                st.text(p.get("content", "")[:1500] + ("..." if len(p.get("content", "")) > 1500 else ""))
     else:
         st.info("수집된 포스팅 데이터가 없습니다.")

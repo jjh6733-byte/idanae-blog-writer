@@ -40,16 +40,16 @@ def analyze_persona(api_key: str = None) -> dict:
 
     if not os.path.exists(CACHE_FILE):
         from crawler import crawl_and_cache
-        crawl_and_cache(max_posts=15)
+        crawl_and_cache(max_posts=5)
 
     with open(CACHE_FILE, "r", encoding="utf-8") as f:
         posts = json.load(f)
 
-    # Prepare excerpts
+    # Prepare excerpts from the 5 latest posts
     sample_texts = []
-    for i, p in enumerate(posts[:6], 1):
+    for i, p in enumerate(posts[:5], 1):
         content_preview = p.get("content", "")[:2500]
-        sample_texts.append(f"=== [포스팅 {i}] 제목: {p.get('title')} ===\n카테고리: {p.get('category')}\n태그: {', '.join(p.get('tags', [])[:10])}\n본문:\n{content_preview}\n")
+        sample_texts.append(f"=== [최신 포스팅 {i} ({p.get('pub_date', '')})] 제목: {p.get('title')} ===\n카테고리: {p.get('category')}\n태그: {', '.join(p.get('tags', [])[:10])}\n본문:\n{content_preview}\n")
 
     corpus = "\n\n".join(sample_texts)
 

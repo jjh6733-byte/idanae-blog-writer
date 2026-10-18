@@ -41,7 +41,7 @@ def fetch_post_content(log_no: str) -> dict:
         resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.encoding = "utf-8"
         if resp.status_code != 200:
-            return {"content": ""}
+            return {"content": "", "tags": []}
 
         soup = BeautifulSoup(resp.text, "html.parser")
         main_container = soup.select_one(".se-main-container, div#postViewArea")
@@ -50,7 +50,7 @@ def fetch_post_content(log_no: str) -> dict:
 
         content_lines = []
         if main_container:
-            paragraphs = main_container.select(".se-text-paragraph, p.se_textarea, div.se-component-content")
+            paragraphs = main_container.select(".se-text-paragraph, p.se_textarea")
             if paragraphs:
                 for p in paragraphs:
                     text = p.get_text(" ", strip=True).replace('\u200b', '').strip()
@@ -62,16 +62,22 @@ def fetch_post_content(log_no: str) -> dict:
                     if text and len(text) > 1 and text not in content_lines[-1:]:
                         content_lines.append(text)
 
+        tags = []
+        for tag_el in soup.select(".item_tag, .post_tag a, a.tag"):
+            t = tag_el.get_text(strip=True).lstrip("#")
+            if t and t not in tags:
+                tags.append(t)
+
         full_content = "\n\n".join(content_lines)
-        return {"content": clean_text(full_content)}
+        return {"content": clean_text(full_content), "tags": tags}
     except Exception as e:
         print(f"Error fetching log_no {log_no}: {e}")
-        return {"content": ""}
+        return {"content": "", "tags": []}
 
-def crawl_and_cache(max_posts: int = 20, force_refresh: bool = False) -> list:
+def crawl_and_cache(max_posts: int = 5, force_refresh: bool = False) -> list:
     """
-    Crawl exactly the 20 OLDEST restaurant/cafe review posts from Category 7 ('살이되고 살이찐(맛집/카페)'),
-    excluding any puzzle/quiz posts, in chronological order.
+    Crawl the 5 LATEST restaurant/cafe review posts from Category 7 ('살이되고 살이찐(맛집/카페)')
+    or all categories excluding quiz/puzzle posts, in newest-first order.
     """
     os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -79,17 +85,17 @@ def crawl_and_cache(max_posts: int = 20, force_refresh: bool = False) -> list:
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 posts = json.load(f)
-                if posts and len(posts) >= max_posts:
+                if posts and len(posts) == max_posts:
                     return posts
         except Exception as e:
             print(f"Failed to read cache: {e}")
 
-    print(f"Fetching posts from Category 7 '살이되고 살이찐(맛집/카페)' on blog '{BLOG_ID}'...")
+    print(f"Fetching latest {max_posts} review posts from blog '{BLOG_ID}'...")
     page = 1
-    cat7_posts = []
+    latest_posts = []
 
-    while True:
-        api_url = f"https://blog.naver.com/PostTitleListAsync.naver?blogId={BLOG_ID}&viewdate=&currentPage={page}&categoryNo=7&parentCategoryNo=&countPerPage=30"
+    while len(latest_posts) < max_posts and page <= 5:
+        api_url = f"https://blog.naver.com/PostTitleListAsync.naver?blogId={BLOG_ID}&viewdate=&currentPage={page}&categoryNo=0&parentCategoryNo=&countPerPage=30"
         resp = requests.get(api_url, headers=HEADERS, timeout=10)
         if resp.status_code != 200:
             break
@@ -110,37 +116,33 @@ def crawl_and_cache(max_posts: int = 20, force_refresh: bool = False) -> list:
             if any(kw in title for kw in EXCLUDE_KEYWORDS):
                 continue
 
-            cat7_posts.append({
+            latest_posts.append({
                 "log_no": str(p.get("logNo")),
                 "title": title,
                 "pub_date": p.get("addDate", ""),
                 "category": "살이되고 살이찐(맛집/카페)",
                 "url": f"https://blog.naver.com/{BLOG_ID}/{p.get('logNo')}"
             })
-        total = int(data.get("totalCount", 0))
-        if page * 30 >= total:
-            break
+            if len(latest_posts) >= max_posts:
+                break
         page += 1
 
-    # Reverse to sort from oldest to newest (chronological order)
-    oldest_posts = list(reversed(cat7_posts))[:max_posts]
-
     collected = []
-    for idx, p in enumerate(oldest_posts, 1):
+    for idx, p in enumerate(latest_posts[:max_posts], 1):
         log_no = p["log_no"]
-        print(f"[{idx}/{len(oldest_posts)}] Crawling oldest review post ({p['pub_date']}): {p['title'][:35]}...")
+        print(f"[{idx}/{max_posts}] Crawling latest review post ({p['pub_date']}): {p['title'][:40]}...")
         details = fetch_post_content(log_no)
         time.sleep(0.15)
         p["content"] = details.get("content", "")
-        p["tags"] = []
+        p["tags"] = details.get("tags", [])
         collected.append(p)
 
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(collected, f, ensure_ascii=False, indent=2)
 
-    print(f"Successfully cached {len(collected)} OLDEST review posts to {CACHE_FILE}")
+    print(f"Successfully cached {len(collected)} LATEST review posts to {CACHE_FILE}")
     return collected
 
 if __name__ == "__main__":
-    posts = crawl_and_cache(max_posts=20, force_refresh=True)
-    print(f"Total cached: {len(posts)} review posts.")
+    posts = crawl_and_cache(max_posts=5, force_refresh=True)
+    print(f"Total cached: {len(posts)} latest review posts.")
