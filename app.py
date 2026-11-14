@@ -237,7 +237,7 @@ with tab1:
         )
         
         taste_impressions = st.text_area(
-            "솔직한 맛/식감 후기 & 킥포인트*",
+            "솔직한 맛/식감 후기 & 킥포인트 (사진 첨부 시 생략 가능)",
             placeholder="예: 연어가 엄청 두툼하고 신선함. 와사비 올려 먹으면 최고! 로스가츠는 겉은 파삭 속은 촉촉 육즙 가득. 우니 파스타는 우니 풍미가 대박이라 완전 킥 포인트였음.",
             height=120,
             key="taste_input"
@@ -248,6 +248,20 @@ with tab1:
             placeholder="예: 화장실에 가글 구비된 사장님 센스 최고,, 면 추가는 꼭 하셔!",
             key="tip_input"
         )
+
+        uploaded_images = st.file_uploader(
+            "📸 블로그에 첨부할 사진 업로드 (선택, 여러 장 가능)",
+            type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=True,
+            help="가게 외관, 메뉴판, 내부 좌석, 음식 사진 등을 올리면 AI가 사진을 직접 보고 메뉴/가격과 비주얼을 본문에 반영하며 [사진 1], [사진 2] 위치를 잡아줍니다.",
+            key="image_uploader"
+        )
+        if uploaded_images:
+            st.caption(f"총 **{len(uploaded_images)}장**의 사진이 첨부되었습니다. 순서대로 본문에 `[사진 1]`, `[사진 2]`... 로 배치됩니다.")
+            cols = st.columns(min(4, len(uploaded_images)))
+            for idx, img_file in enumerate(uploaded_images):
+                with cols[idx % len(cols)]:
+                    st.image(img_file, caption=f"사진 {idx + 1}", use_container_width=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 이다내 말투로 초안 생성하기", type="primary", use_container_width=True)
@@ -258,51 +272,57 @@ with tab1:
         if generate_btn:
             if not subject_name:
                 st.error("상호명 또는 제품명을 입력해 주세요!")
-            elif not eaten_foods:
-                st.error("실제로 드신 음식(메뉴명)을 입력해 주세요!")
-            elif not taste_impressions:
-                st.error("솔직한 맛/후기 내용을 간단히 적어주세요!")
+            elif not eaten_foods and not uploaded_images:
+                st.error("실제로 드신 음식(메뉴명)을 입력하거나 사진을 첨부해 주세요!")
+            elif not taste_impressions and not uploaded_images:
+                st.error("솔직한 맛/후기 내용을 간단히 적거나 사진을 첨부해 주세요!")
             elif not active_key:
                 st.warning("⚠️ 사이드바에 Google Gemini API Key를 입력해 주세요. (무료 발급: aistudio.google.com)")
             else:
+                effective_eaten = eaten_foods.strip() if eaten_foods else "첨부된 사진 속 메뉴/제품"
                 user_notes = {
                     "context": context,
                     "taste_impressions": taste_impressions,
                     "extra_tips": extra_tips,
-                    "eaten_foods": eaten_foods
+                    "eaten_foods": effective_eaten
                 }
                 
+                image_payloads = []
+                if uploaded_images:
+                    for img_file in uploaded_images:
+                        image_payloads.append({
+                            "name": img_file.name,
+                            "mime_type": img_file.type or "image/jpeg",
+                            "bytes": img_file.getvalue()
+                        })
+
                 # Check if store already researched
                 store_data = st.session_state.get(f"research_{subject_name}")
                 if not store_data:
                     with st.spinner(f"'{subject_name}'의 메뉴/가격 및 최근 후기 정보를 실시간 검색 중입니다... 🔎"):
-                        store_data = research_store(subject_name, eaten_foods=eaten_foods, api_key=active_key)
+                        store_data = research_store(subject_name, eaten_foods=effective_eaten, api_key=active_key)
                         st.session_state[f"research_{subject_name}"] = store_data
 
-                with st.spinner("이다내 페르소나로 참신하고 생생한 초안을 작성 중입니다... ✨"):
+                spinner_msg = (
+                    f"첨부된 사진 {len(image_payloads)}장을 분석하며 이다내 말투로 초안을 작성 중입니다... ✨"
+                    if image_payloads
+                    else "이다내 페르소나로 참신하고 생생한 초안을 작성 중입니다... ✨"
+                )
+                with st.spinner(spinner_msg):
                     try:
-                        try:
-                            result = generate_blog_draft(
-                                category=category,
-                                subject_name=subject_name,
-                                eaten_foods=eaten_foods,
-                                user_notes=user_notes,
-                                store_research_data=store_data,
-                                api_key=active_key
-                            )
-                        except TypeError as te:
-                            if "eaten_foods" in str(te):
-                                result = generate_blog_draft(
-                                    category=category,
-                                    subject_name=subject_name,
-                                    user_notes=user_notes,
-                                    api_key=active_key
-                                )
-                            else:
-                                raise te
+                        result = generate_blog_draft(
+                            category=category,
+                            subject_name=subject_name,
+                            eaten_foods=effective_eaten,
+                            user_notes=user_notes,
+                            store_research_data=store_data,
+                            api_key=active_key,
+                            images=image_payloads
+                        )
                         st.session_state["last_draft"] = result
                         st.session_state["last_store_data"] = store_data
-                        st.success("초안 작성이 완료되었습니다! 🎈")
+                        model_used = result.get("model_used", "gemini-3.8-flash")
+                        st.success(f"초안 작성이 완료되었습니다! (사용 모델: {model_used}) 🎈")
                     except Exception as e:
                         st.error(f"생성 중 오류 발생: {e}")
 

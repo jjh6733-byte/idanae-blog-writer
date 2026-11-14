@@ -37,9 +37,10 @@ def generate_blog_draft(
     user_notes: dict = None,
     store_research_data: dict = None,
     api_key: str = None,
+    images: list = None,
     **kwargs
 ) -> dict:
-    """Generate a complete Naver blog draft mimicking idanae's latest 5 posts format and researched store info."""
+    """Generate a complete Naver blog draft mimicking idanae's latest 5 posts format, researched store info, and attached images."""
     # Backward compatibility with older callers
     if isinstance(eaten_foods, dict) and user_notes is None:
         user_notes = eaten_foods
@@ -141,8 +142,13 @@ def generate_blog_draft(
      · `"안에 내용물도 듬뿍 들어가서 진짜 밥도둑이에요 ,,"`
      · `"콩가루/소스에 찍어먹으면 얼마나 맛있게요 .. 아무리 배불러도 들어가는 맛!"`
      · `"다른 곳보다 가격도 합리적이라 가성비 최고"`
-3. 사진 안내 가이드:
-   - 적재적소에 `[사진: 매장 외관 및 간판]`, `[사진: 메뉴판]`, `[사진: 매장 내부 좌석]`, `[사진: 주문한 메뉴 전체샷]`, `[사진: 메뉴 근접샷 및 단면]` 등을 자연스럽게 배치하세요.
+3. 사진 안내 가이드 및 첨부 이미지 활용:
+   - 사용자가 사진을 첨부한 경우, 각 사진(사진 1, 사진 2, ...)의 내용을 직접 눈으로 보고 파악해 본문에 생생하게 반영하세요!
+     · 메뉴판 사진이 있다면 사진 속 메뉴명과 가격을 정확히 읽어 `Episode.1  M E N U` 리스트(`· 메뉴명 가격`)에 반영하세요.
+     · 음식/제품 사진이 있다면 실제 비주얼(색감, 토핑, 플레이팅, 두께, 굽기, 윤기, 구성 등)을 자연스럽게 묘사하세요.
+     · 매장 외관/내부 사진이 있다면 인테리어 분위기, 좌석 형태, 간판 느낌 등을 `✧ 가 게 외 관 ✧` 및 `Episode.2  I N T E R I O R`에 녹여 쓰세요.
+     · 본문 내 사진 배치 위치에는 첨부된 사진 번호와 맞춰 `[사진 1: 설명]`, `[사진 2: 설명]` 형태로 모두 알맞은 위치에 넣어주세요.
+   - 첨부된 사진이 없는 경우에는 적재적소에 `[사진: 매장 외관 및 간판]`, `[사진: 메뉴판]`, `[사진: 매장 내부 좌석]`, `[사진: 주문한 메뉴 전체샷]`, `[사진: 메뉴 근접샷 및 단면]` 등을 자연스럽게 배치하세요.
 
 [출력 형식]
 반드시 다음 키를 가진 JSON 객체로 반환하세요:
@@ -166,6 +172,11 @@ def generate_blog_draft(
     researched_parking = store_research_data.get("parking", "")
     researched_reviews = "\n".join([f"- {h}" for h in store_research_data.get("recent_review_highlights", [])])
 
+    image_notice = ""
+    if images:
+        image_names = ", ".join([f"사진 {i}: {img.get('name', f'image_{i}')}" for i, img in enumerate(images, 1)])
+        image_notice = f"\n[첨부된 사진 목록 (총 {len(images)}장)]\n- {image_names}\n- 아래 함께 전달된 사진들을 직접 분석하여 메뉴/가격 정보, 매장 분위기, 음식/제품의 실제 비주얼을 본문에 반영하고, 각 사진이 들어갈 가장 자연스러운 위치에 `[사진 1: ...]`, `[사진 2: ...]` 형식으로 전부 배치해 주세요!\n"
+
     prompt = f"""[새로 작성할 블로그 포스팅 정보]
 - 카테고리: {category}
 - 상호명/제품명: {subject_name}
@@ -173,7 +184,7 @@ def generate_blog_draft(
 - 방문/사용 계기: {user_notes.get('context', '평소에 좋아하던 곳이라 방문 / 내돈내산 방문')}
 - 솔직한 맛/장단점 및 킥포인트: {user_notes.get('taste_impressions', '')}
 - 내가 적은 추가 메모 및 꿀팁: {user_notes.get('extra_tips', '')}
-
+{image_notice}
 [웹 검색으로 확인된 실제 가게 정보 및 메뉴/가격]
 - 주소: {researched_addr}
 - 영업시간: {researched_hours}
@@ -187,7 +198,16 @@ def generate_blog_draft(
 [최신 이다내 블로그 최근 5개 게시글 실제 양식 레퍼런스]
 {few_shot_context}
 
-위 최신 글 5개의 작성 양식(최상단 3줄 타이틀 헤더, 🔗주소/🕔영업시간/📞전화번호/🚗주차 포맷, ✧ 가 게 외 관 ✧, Episode.1 M E N U / Episode.2 I N T E R I O R / Episode.3 R E V I E W 포맷, · 메뉴명 가격 나열, 모바일용 짧은 호흡 줄바꿈)을 그대로 따라서, 내가 먹은 음식({eaten_foods})을 중심으로 생생한 이다내 스타일의 네이버 블로그 초안을 작성해 주세요!"""
+위 최신 글 5개의 작성 양식(최상단 3줄 타이틀 헤더, 🔗주소/🕔영업시간/📞전화번호/🚗주차 포맷, ✧ 가 게 외 관 ✧, Episode.1 M E N U / Episode.2 I N T E R I O R / Episode.3 R E V I E W 포맷, · 메뉴명 가격 나열, 모바일용 짧은 호흡 줄바꿈)을 그대로 따라서, 내가 먹은 음식({eaten_foods})과 첨부된 사진을 중심으로 생생한 이다내 스타일의 네이버 블로그 초안을 작성해 주세요!"""
+
+    contents_payload = [system_instruction, prompt]
+    if images:
+        for idx, img in enumerate(images, 1):
+            img_bytes = img.get("bytes")
+            mime_type = img.get("mime_type") or "image/jpeg"
+            if img_bytes:
+                contents_payload.append(f"\n[첨부 사진 {idx} ({img.get('name', '')})]")
+                contents_payload.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
 
     client = genai.Client(api_key=key)
 
@@ -227,7 +247,7 @@ def generate_blog_draft(
                 print(f"[Gemini API] Generating draft with model '{model_name}' (attempt {attempt+1})...")
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=[system_instruction, prompt],
+                    contents=contents_payload,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         temperature=0.75
