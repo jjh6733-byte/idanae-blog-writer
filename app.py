@@ -94,7 +94,7 @@ except Exception:
 
 from crawler import crawl_and_cache
 from analyzer import analyze_persona
-from generator import generate_blog_draft, load_persona, load_few_shots
+from generator import generate_blog_draft, revise_blog_draft, load_persona, load_few_shots
 from store_researcher import research_store
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -308,6 +308,7 @@ with tab1:
                         )
                         st.session_state["last_draft"] = result
                         st.session_state["last_store_data"] = store_data
+                        st.session_state["revision_history"] = []
                         model_used = result.get("model_used", "gemini-3.8-flash")
                         st.success(f"초안 작성이 완료되었습니다! (사용 모델: {model_used}) 🎈")
                     except Exception as e:
@@ -350,6 +351,61 @@ with tab1:
             tags_str = ", ".join(raw_tags) if isinstance(raw_tags, list) else str(raw_tags)
             st.caption("아래 태그를 복사하여 네이버 에디터 하단 태그 입력창에 붙여넣으세요.")
             st.code(tags_str, language="text")
+
+            st.markdown("---")
+            st.markdown("#### ✍️ 4. 피드백으로 초안 다듬기")
+            rev_history = st.session_state.get("revision_history", [])
+            if rev_history:
+                with st.expander(f"📝 적용된 수정 이력 ({len(rev_history)}회)", expanded=False):
+                    for r_idx, r_item in enumerate(rev_history, 1):
+                        st.markdown(f"**{r_idx}차 수정:** {r_item}")
+
+            feedback_text = st.text_area(
+                "수정이 필요한 부분이나 원하는 방향을 자유롭게 적어주세요",
+                height=110,
+                placeholder="예:\n- 제목 1번을 조금 더 궁금증이 생기게 바꿔줘\n- Episode.2 설명을 조금 더 짧고 담백하게 줄여줘\n- [사진 2] 부분에 거울 앞에서 얼굴 가리고 찍는 팁을 한 줄 추가해줘",
+                key="draft_feedback_input",
+            )
+            revise_btn = st.button(
+                "🔄 피드백 반영해서 초안 수정하기",
+                use_container_width=True,
+                key="revise_draft_btn",
+            )
+
+            if revise_btn:
+                if not feedback_text.strip():
+                    st.warning("수정 요청할 피드백 내용을 입력해 주세요!")
+                elif not active_key:
+                    st.warning("⚠️ 사이드바에 Google Gemini API Key를 입력해 주세요.")
+                else:
+                    rev_images = []
+                    if uploaded_images:
+                        for img_file in uploaded_images:
+                            rev_images.append({
+                                "name": img_file.name,
+                                "mime_type": img_file.type or "image/jpeg",
+                                "bytes": img_file.getvalue(),
+                            })
+                    with st.spinner("피드백을 반영하여 초안을 수정 중입니다... ✍️"):
+                        try:
+                            revised = revise_blog_draft(
+                                current_draft=draft,
+                                feedback=feedback_text.strip(),
+                                category=category,
+                                subject_name=(subject_name or "").strip(),
+                                api_key=active_key,
+                                images=rev_images,
+                            )
+                            st.session_state["last_draft"] = revised
+                            history = st.session_state.get("revision_history", [])
+                            history.append(feedback_text.strip())
+                            st.session_state["revision_history"] = history
+                            st.success(
+                                f"피드백을 반영해 초안을 수정했습니다! (사용 모델: {revised.get('model_used', 'gemini-3.8-flash')}) ✨"
+                            )
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"수정 중 오류 발생: {e}")
         else:
             st.info("👈 왼쪽 폼에 정보를 작성하거나 **'예시 데이터 채우기'**를 누른 뒤 **'초안 생성하기'**를 클릭하세요!")
 

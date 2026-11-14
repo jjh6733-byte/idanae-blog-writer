@@ -199,15 +199,14 @@ def generate_blog_draft(
 위 최신 글 5개의 작성 양식(최상단 3줄 타이틀 헤더, 장소인 경우 🔗주소/🕔영업시간/📞전화번호/🚗주차 포맷, `✧ 소 제 목 ✧`, `Episode.1 / Episode.2 / Episode.3` 포맷, 가운뎃점 `·` 리스트, 모바일용 짧은 호흡 줄바꿈)을 주제({category} / {subject_name})에 맞게 자연스럽게 적용하여, 참고사항과 첨부 사진을 중심으로 생생한 이다내 스타일의 네이버 블로그 초안을 작성해 주세요!"""
 
     contents_payload = [system_instruction, prompt]
-    if images:
-        for idx, img in enumerate(images, 1):
-            img_bytes = img.get("bytes")
-            mime_type = img.get("mime_type") or "image/jpeg"
-            if img_bytes:
-                contents_payload.append(f"\n[첨부 사진 {idx} ({img.get('name', '')})]")
-                contents_payload.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
+    _append_image_parts(contents_payload, images)
+    result = _call_gemini_json(key, contents_payload, temperature=0.75)
+    result["store_research_data"] = store_research_data
+    return result
 
-    client = genai.Client(api_key=key)
+def _call_gemini_json(api_key: str, contents_payload: list, temperature: float = 0.75) -> dict:
+    """Call Gemini Flash models with fallback and parse JSON output."""
+    client = genai.Client(api_key=api_key)
 
     # Base candidates (Gemini 3.8 / 3.7 / 3.6 Flash and stable fallbacks, excluding discontinued 2.5)
     base_models = [
@@ -219,7 +218,6 @@ def generate_blog_draft(
     ]
     models_to_try = []
 
-    # Try dynamically discovering active Flash models for this API key
     try:
         remote_models = [
             m.name.replace("models/", "")
@@ -242,13 +240,13 @@ def generate_blog_draft(
     for model_name in models_to_try:
         for attempt in range(2):
             try:
-                print(f"[Gemini API] Generating draft with model '{model_name}' (attempt {attempt+1})...")
+                print(f"[Gemini API] Calling model '{model_name}' (attempt {attempt+1})...")
                 response = client.models.generate_content(
                     model=model_name,
                     contents=contents_payload,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        temperature=0.75
+                        temperature=temperature
                     )
                 )
                 raw_text = response.text.strip()
@@ -259,10 +257,8 @@ def generate_blog_draft(
                 if raw_text.endswith("```"):
                     raw_text = raw_text[:-3]
                 result = json.loads(raw_text.strip())
-                # Attach researched store data for caller reference
-                result["store_research_data"] = store_research_data
                 result["model_used"] = model_name
-                print(f"[Gemini API] Successfully generated draft using '{model_name}'!")
+                print(f"[Gemini API] Success using '{model_name}'!")
                 return result
             except Exception as e:
                 last_error = e
@@ -281,3 +277,71 @@ def generate_blog_draft(
 
     if last_error:
         raise last_error
+    raise RuntimeError("No Gemini models succeeded.")
+
+
+def _append_image_parts(contents_payload: list, images: list | None) -> None:
+    if not images:
+        return
+    for idx, img in enumerate(images, 1):
+        img_bytes = img.get("bytes")
+        mime_type = img.get("mime_type") or "image/jpeg"
+        if img_bytes:
+            contents_payload.append(f"\n[첨부 사진 {idx} ({img.get('name', '')})]")
+            contents_payload.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
+
+
+def revise_blog_draft(
+    current_draft: dict,
+    feedback: str,
+    category: str = "",
+    subject_name: str = "",
+    api_key: str = None,
+    images: list = None,
+) -> dict:
+    """Revise an existing blog draft based on user feedback while keeping the idanae persona."""
+    key = api_key or os.getenv("GEMINI_API_KEY")
+    if not key:
+        raise ValueError("Gemini API Key가 필요합니다.")
+    if not feedback or not feedback.strip():
+        raise ValueError("수정 요청할 피드백 내용을 입력해 주세요.")
+
+    persona = load_persona()
+    endings = ", ".join(persona.get("sentence_endings", []))
+    expressions = ", ".join(persona.get("signature_expressions", []))
+    emojis = " ".join(persona.get("emojis", []))
+
+    draft_snapshot = {
+        "titles": current_draft.get("titles", []),
+        "body": current_draft.get("body", ""),
+        "tags": current_draft.get("tags", []),
+    }
+
+    system_instruction = f"""당신은 네이버 블로거 '이다내(idanae)' 본인입니다.
+방금 작성한 블로그 초안에 대해 사용자가 수정 피드백을 주었습니다.
+사용자의 피드백을 정확히 반영해 초안을 수정하되, 아래의 이다내 문체와 포맷 규칙은 반드시 유지하세요:
+1. 종결어미({endings}), 시그니처 표현({expressions}), 이모지({emojis}) 유지
+2. 모바일 가독성을 위한 짧은 호흡의 줄바꿈(15~25자 내외) 유지
+3. 최상단 3줄 타이틀 헤더, `✧ 소 제 목 ✧`, `Episode.1 / 2 / 3`, `[사진 N: ...]` 배치 가이드 등 기존 구조는 피드백에서 변경을 요청한 부분 외에는 일관되게 유지
+4. 피드백과 무관한 기존 정보나 사실관계를 임의로 삭제하거나 왜곡하지 말 것
+5. 반드시 유효한 JSON 포맷으로만 응답할 것 (마크다운 코드블록 없이 순수 JSON):
+   {{"titles": ["제목1", "제목2", "제목3"], "body": "수정된 본문 전체", "tags": ["태그1", "태그2", ...]}}"""
+
+    prompt = f"""[주제 / 카테고리]
+카테고리: {category or '미지정'}
+주제: {subject_name or '미지정'}
+
+[현재 초안 (JSON)]
+{json.dumps(draft_snapshot, ensure_ascii=False, indent=2)}
+
+[사용자 수정 피드백]
+{feedback.strip()}
+
+위 피드백을 충실히 반영하여 수정된 전체 초안(titles, body, tags)을 JSON으로 출력해 주세요."""
+
+    contents_payload = [system_instruction, prompt]
+    _append_image_parts(contents_payload, images)
+    result = _call_gemini_json(key, contents_payload, temperature=0.65)
+    if "store_research_data" in current_draft:
+        result["store_research_data"] = current_draft["store_research_data"]
+    return result
