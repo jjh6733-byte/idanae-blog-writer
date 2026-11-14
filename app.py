@@ -164,10 +164,12 @@ tab1, tab2, tab3 = st.tabs(["✍️ 신규 초안 작성", "🧠 학습된 최�
 def fill_sample():
     st.session_state["category_input"] = "살이되고 살이찐(맛집/카페)"
     st.session_state["subject_input"] = "성수 호호식당"
-    st.session_state["eaten_input"] = "사케동, 로스가츠정식, 우니 오일 파스타, 레몬 하이볼"
-    st.session_state["context_input"] = "주말에 친구랑 성수동 나들이 겸 분위기 좋은 일본 가정식 먹으러 방문!"
-    st.session_state["taste_input"] = "연어가 두툼하고 신선해서 비린내 1도 없고 밥 간이 기가 막힘. 와사비 올려 먹으면 입에서 사르르 녹아내림,, 로스가츠는 겉이 진짜 파삭파삭 바삭함의 극치인데 속은 육즙 팡팡 촉촉함. 우니 파스타는 우니를 아낌없이 넣어주셔서 감칠맛 폭발! 친구랑 한 톨도 안 남기고 싹 비움 ㅋ"
-    st.session_state["tip_input"] = "주말엔 웨이팅 필수라 테이블링 앱으로 원격 줄서기 꼭 하셔! 화장실에 이솝 핸드워시 구비해두신 사장님 센스 최고,,"
+    st.session_state["notes_input"] = (
+        "- 주문 메뉴: 사케동, 로스가츠정식, 우니 오일 파스타, 레몬 하이볼\n"
+        "- 방문 계기: 주말에 친구랑 성수동 나들이 겸 분위기 좋은 일본 가정식 먹으러 방문\n"
+        "- 후기: 연어가 두툼하고 신선해서 비린내 1도 없고 밥 간이 기가 막힘. 로스가츠는 겉바속촉 육즙 가득! 우니 파스타는 감칠맛 폭발해서 킥 포인트였음\n"
+        "- 꿀팁: 주말엔 웨이팅 필수라 테이블링 앱 원격 줄서기 추천! 화장실에 이솝 핸드워시 구비돼 있음"
+    )
 
 with tab1:
     col_in, col_out = st.columns([1.05, 1.15], gap="large")
@@ -175,13 +177,13 @@ with tab1:
     with col_in:
         c_title, c_btn = st.columns([2.2, 1.8])
         with c_title:
-            st.markdown("### 📝 방문/체험 메모 입력")
+            st.markdown("### 📝 포스팅 정보 & 메모")
         with c_btn:
             st.button("✨ 예시 데이터 채우기", on_click=fill_sample, use_container_width=True)
         
         category = st.selectbox(
             "카테고리",
-            ["살이되고 살이찐(맛집/카페)", "띵동 택배왔어요(식품/꿀템)", "기세좋은 여행일기", "기세로 취미/일상"],
+            ["살이되고 살이찐(맛집/카페)", "띵동 택배왔어요(식품/꿀템)", "기세좋은 여행일기", "기세로 취미/일상", "자유 주제 / 기타"],
             index=0,
             key="category_input"
         )
@@ -189,71 +191,58 @@ with tab1:
         c_sub1, c_sub2 = st.columns([2.5, 1.5])
         with c_sub1:
             subject_name = st.text_input(
-                "상호명 또는 제품명*",
-                placeholder="예: 성수 호호식당, 한남물터, 올라포케 문정",
+                "주제 / 상호명 / 제품명*",
+                placeholder="예: 성수 호호식당, 다이소 어퓨 헤어식초, 오사카 쇼핑리스트",
                 key="subject_input"
             )
         with c_sub2:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            search_menu_btn = st.button("🔍 메뉴/정보 조회", use_container_width=True)
+            search_menu_btn = st.button("🔍 정보/메뉴 조회", use_container_width=True)
 
-        # Handle explicit store search
+        # Handle explicit store/subject search
         active_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        current_eaten_foods = st.session_state.get("eaten_input", "")
+        current_notes = st.session_state.get("notes_input", "")
         if search_menu_btn:
             if not subject_name:
-                st.warning("상호명을 먼저 입력해 주세요!")
+                st.warning("주제나 상호명/제품명을 먼저 입력해 주세요!")
             else:
-                with st.spinner(f"'{subject_name}'의 메뉴/가격 및 최근 블로그 후기를 검색 중입니다..."):
-                    researched = research_store(subject_name, eaten_foods=current_eaten_foods, api_key=active_key)
+                with st.spinner(f"'{subject_name}'의 기본 정보 및 최근 블로그 후기를 검색 중입니다..."):
+                    researched = research_store(subject_name, eaten_foods="", api_key=active_key)
                     st.session_state[f"research_{subject_name}"] = researched
-                    st.success(f"'{subject_name}'의 메뉴 정보와 최근 후기 정보를 가져왔습니다! 👏")
+                    st.success(f"'{subject_name}'의 정보와 최근 후기 요약을 가져왔습니다! 👏")
 
         cached_research = st.session_state.get(f"research_{subject_name}")
-        if cached_research and cached_research.get("formatted_menu_text"):
-            with st.expander("🔎 자동 검색된 가게 정보 및 메뉴판 확인", expanded=True):
+        if cached_research and (cached_research.get("formatted_menu_text") or cached_research.get("address")):
+            with st.expander("🔎 자동 검색된 정보 및 가격/메뉴 확인", expanded=True):
                 if cached_research.get("address"):
-                    st.markdown(f"**📍 주소:** {cached_research.get('address')}")
+                    st.markdown(f"**🔗 주소:** {cached_research.get('address')}")
                 if cached_research.get("hours"):
-                    st.markdown(f"**⏰ 영업시간:** {cached_research.get('hours')}")
-                st.markdown("**📋 확인된 메뉴 및 가격표:**")
-                st.text(cached_research.get("formatted_menu_text"))
+                    st.markdown(f"**🕔 영업시간:** {cached_research.get('hours')}")
+                if cached_research.get("formatted_menu_text"):
+                    st.markdown("**📋 확인된 메뉴/품목 및 가격표:**")
+                    st.text(cached_research.get("formatted_menu_text"))
                 if cached_research.get("recent_review_highlights"):
                     st.markdown("**💬 최근 블로그 후기 요약:**")
                     for h in cached_research.get("recent_review_highlights"):
                         st.markdown(f"- {h}")
 
-        eaten_foods = st.text_input(
-            "🍽️ 내가 실제로 먹은 음식*",
-            placeholder="예: 사케동, 로스가츠정식, 우니 오일 파스타 (가격은 몰라도 OK!)",
-            help="가격은 비워두시고 드신 음식 이름만 콤마로 간단히 적어주세요. 가게 전체 메뉴 및 가격은 검색을 통해 초안에 자동 반영됩니다.",
-            key="eaten_input"
-        )
-        
-        context = st.text_input(
-            "방문/구매 계기",
-            placeholder="예: 주말 데이트, 퇴근 후 한잔할 곳 찾다가 발견, 점심 혼밥",
-            key="context_input"
-        )
-        
-        taste_impressions = st.text_area(
-            "솔직한 맛/식감 후기 & 킥포인트 (사진 첨부 시 생략 가능)",
-            placeholder="예: 연어가 엄청 두툼하고 신선함. 와사비 올려 먹으면 최고! 로스가츠는 겉은 파삭 속은 촉촉 육즙 가득. 우니 파스타는 우니 풍미가 대박이라 완전 킥 포인트였음.",
-            height=120,
-            key="taste_input"
-        )
-        
-        extra_tips = st.text_input(
-            "디테일 센스 및 꿀팁 (선택)",
-            placeholder="예: 화장실에 가글 구비된 사장님 센스 최고,, 면 추가는 꼭 하셔!",
-            key="tip_input"
+        general_notes = st.text_area(
+            "📌 참고사항 / 메모 (자유롭게 작성, 사진만 올려도 OK)",
+            placeholder=(
+                "글에 들어가길 원하는 내용을 편하게 적어주세요! (음식, 제품, 여행, 일상 모두 가능)\n"
+                "예:\n"
+                "- 주문한 메뉴 / 구매한 제품명 및 가격\n"
+                "- 방문·구매 계기, 좋았던 점, 아쉬운 점, 꿀팁 등"
+            ),
+            height=180,
+            key="notes_input"
         )
 
         uploaded_images = st.file_uploader(
-            "📸 블로그에 첨부할 사진 업로드 (선택, 여러 장 가능)",
+            "📸 블로그에 첨부할 사진 업로드 (여러 장 가능)",
             type=["png", "jpg", "jpeg", "webp"],
             accept_multiple_files=True,
-            help="가게 외관, 메뉴판, 내부 좌석, 음식 사진 등을 올리면 AI가 사진을 직접 보고 메뉴/가격과 비주얼을 본문에 반영하며 [사진 1], [사진 2] 위치를 잡아줍니다.",
+            help="사진을 올리면 AI가 사진 속 내용(메뉴/가격, 제품 디테일, 분위기, 비주얼 등)을 직접 보고 참고사항과 함께 본문을 작성하며 [사진 1], [사진 2] 위치를 잡아줍니다.",
             key="image_uploader"
         )
         if uploaded_images:
@@ -270,21 +259,16 @@ with tab1:
         st.markdown("### 📄 생성된 네이버 블로그 초안")
         
         if generate_btn:
-            if not subject_name:
-                st.error("상호명 또는 제품명을 입력해 주세요!")
-            elif not eaten_foods and not uploaded_images:
-                st.error("실제로 드신 음식(메뉴명)을 입력하거나 사진을 첨부해 주세요!")
-            elif not taste_impressions and not uploaded_images:
-                st.error("솔직한 맛/후기 내용을 간단히 적거나 사진을 첨부해 주세요!")
+            if not subject_name and not uploaded_images and not general_notes.strip():
+                st.error("주제(상호명/제품명)를 입력하거나 참고사항/사진을 첨부해 주세요!")
+            elif not general_notes.strip() and not uploaded_images:
+                st.error("참고사항을 간단히 적거나 사진을 첨부해 주세요!")
             elif not active_key:
                 st.warning("⚠️ 사이드바에 Google Gemini API Key를 입력해 주세요. (무료 발급: aistudio.google.com)")
             else:
-                effective_eaten = eaten_foods.strip() if eaten_foods else "첨부된 사진 속 메뉴/제품"
+                effective_subject = subject_name.strip() if subject_name else "첨부 사진 기반 블로그 포스팅"
                 user_notes = {
-                    "context": context,
-                    "taste_impressions": taste_impressions,
-                    "extra_tips": extra_tips,
-                    "eaten_foods": effective_eaten
+                    "general_notes": general_notes.strip()
                 }
                 
                 image_payloads = []
@@ -296,24 +280,27 @@ with tab1:
                             "bytes": img_file.getvalue()
                         })
 
-                # Check if store already researched
-                store_data = st.session_state.get(f"research_{subject_name}")
+                # Use cached research if user clicked search, or auto-research only for 맛집/카페
+                store_data = st.session_state.get(f"research_{effective_subject}")
                 if not store_data:
-                    with st.spinner(f"'{subject_name}'의 메뉴/가격 및 최근 후기 정보를 실시간 검색 중입니다... 🔎"):
-                        store_data = research_store(subject_name, eaten_foods=effective_eaten, api_key=active_key)
-                        st.session_state[f"research_{subject_name}"] = store_data
+                    if ("맛집" in category or "카페" in category) and subject_name.strip():
+                        with st.spinner(f"'{effective_subject}'의 장소/메뉴 및 최근 후기 정보를 검색 중입니다... 🔎"):
+                            store_data = research_store(effective_subject, eaten_foods="", api_key=active_key)
+                            st.session_state[f"research_{effective_subject}"] = store_data
+                    else:
+                        store_data = {}
 
                 spinner_msg = (
-                    f"첨부된 사진 {len(image_payloads)}장을 분석하며 이다내 말투로 초안을 작성 중입니다... ✨"
+                    f"첨부된 사진 {len(image_payloads)}장과 참고사항을 반영해 이다내 말투로 초안을 작성 중입니다... ✨"
                     if image_payloads
-                    else "이다내 페르소나로 참신하고 생생한 초안을 작성 중입니다... ✨"
+                    else "이다내 페르소나로 생생한 초안을 작성 중입니다... ✨"
                 )
                 with st.spinner(spinner_msg):
                     try:
                         result = generate_blog_draft(
                             category=category,
-                            subject_name=subject_name,
-                            eaten_foods=effective_eaten,
+                            subject_name=effective_subject,
+                            eaten_foods="",
                             user_notes=user_notes,
                             store_research_data=store_data,
                             api_key=active_key,
@@ -348,7 +335,7 @@ with tab1:
                 st.download_button(
                     label="💾 .txt 다운로드",
                     data=body_text,
-                    file_name=f"{subject_name}_blog_draft.txt",
+                    file_name=f"{(subject_name or '').strip() or 'blog'}_draft.txt",
                     mime="text/plain",
                     use_container_width=True
                 )
